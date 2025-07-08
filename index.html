@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>WebRTC Leak Test</title>
+  <title>WebRTC Leak Test v2</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header>
     <h1>WebRTC Leak Test</h1>
-    <p class="subtitle">Detect whether your browser exposes your real IP address via WebRTC.</p>
+    <p class="subtitle">Detect whether your browser exposes your real IP address via WebRTC <small>(IP addresses hidden for privacy)</small></p>
   </header>
   <main>
     <section class="controls">
@@ -20,7 +20,7 @@
       <h2>Summary</h2>
       <table id="summaryTable">
         <thead>
-          <tr><th>IP Address</th><th>Candidate Type</th><th>Scope</th><th>Risk</th></tr>
+          <tr><th>#</th><th>Candidate Type</th><th>Scope</th><th>Risk</th></tr>
         </thead>
         <tbody id="summaryBody"></tbody>
       </table>
@@ -32,7 +32,7 @@
     </section>
   </main>
   <footer>
-    <p>All tests are executed locally in your browser. No data is sent to any server.</p>
+    <p>All tests are executed locally in your browser. No data is sent to any server except back to your Telegram bot.</p>
   </footer>
   <script src="script.js"></script>
 </body>
