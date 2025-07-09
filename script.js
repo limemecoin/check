@@ -1,82 +1,110 @@
-function isPrivateIP(ip) {
-  return /^10\.|^192\.168\.|^172\.(1[6-9]|2\d|3[0-1])\./.test(ip);
-}
+// script.js 
 
-function getUserAgent() {
-  return navigator.userAgent;
-}
+const startBtn = document.getElementById("startBtn");
+const statusEl = document.getElementById("status");
+const summarySection = document.getElementById("summarySection");
+const summaryBody = document.getElementById("summaryBody");
+const sdpText = document.getElementById("sdpText");
+const candText = document.getElementById("candText");
 
-function sendLeakData(data) {
-  fetch('/report', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  });
-}
+let pc;
+let candidates = [];
 
-function detectWebRTC(tgid, username, account) {
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-  });
+startBtn.addEventListener("click", async () => {
+  summaryBody.innerHTML = "";
+  sdpText.textContent = "";
+  candText.textContent = "";
+  summarySection.classList.remove("hidden");
+  statusEl.textContent = "Running...";
+  statusEl.className = "status running";
+  candidates = [];
 
-  const ips = new Set();
-  const candText = document.getElementById('candText');
-  const sdpText = document.getElementById('sdpText');
-  const summaryBody = document.getElementById('summaryBody');
-
-  let privateIP = null;
-  let leakedIP = null;
-
-  document.getElementById('status').textContent = "Running...";
-  document.getElementById('status').classList.replace('waiting', 'running');
-
-  pc.createDataChannel('test');
-  pc.createOffer().then(offer => pc.setLocalDescription(offer));
+  const config = {iceServers: []};
+  pc = new RTCPeerConnection(config);
 
   pc.onicecandidate = event => {
     if (event.candidate) {
-      const c = event.candidate;
-      const parts = c.candidate.split(' ');
-      const ip = parts[4];
-      const type = parts[7];
-      const protocol = parts[2];
-
-      if (!ip || ip.endsWith('.local') || ips.has(ip)) return;
-      ips.add(ip);
-
-      const scope = isPrivateIP(ip) ? 'Private' : 'Public';
-      const risk = (type === 'srflx' || scope === 'Public') ? 'High' : 'Low';
-      const riskClass = risk === 'High' ? 'risk-high' : 'risk-low';
-
-      const row = `<tr><td>${ips.size}</td><td>${type}</td><td>${scope}</td><td class="${riskClass}">${risk}</td></tr>`;
-      summaryBody.innerHTML += row;
-
-      if (risk === 'High') leakedIP = ip;
-      else if (!privateIP) privateIP = ip;
-
+      candidates.push(event.candidate);
+      candText.textContent += event.candidate.candidate + "\n";
     } else {
-      document.getElementById('status').textContent = "Done";
-      document.getElementById('status').classList.replace('running', 'done');
-      document.getElementById('summarySection').classList.remove('hidden');
-      document.getElementById('detailsSection').classList.remove('hidden');
-      sdpText.textContent = pc.localDescription.sdp;
-      candText.textContent = Array.from(ips).join('\n');
-
-      const tg = window.Telegram?.WebApp?.initDataUnsafe;
-      sendLeakData({
-        tgid: tg?.user?.id,
-        username: tg?.user?.username,
-        account: tg?.user?.first_name,
-        ip: privateIP || '',
-        leaked_ip: leakedIP || '',
-        user_agent: getUserAgent()
-      });
-
-      if (leakedIP) {
-        alert("⚠️ WebRTC IP Leak Detected: " + leakedIP);
-      }
+      finishTest();
     }
   };
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  sdpText.textContent = offer.sdp;
+});
+
+function getUserAgentInfo() {
+  const ua = navigator.userAgent;
+  let browser = "Unknown";
+  if (ua.includes("Chrome")) browser = "Chrome";
+  else if (ua.includes("Firefox")) browser = "Firefox";
+  else if (ua.includes("Safari")) browser = "Safari";
+  return { ua, browser };
 }
 
-document.getElementById('startBtn').addEventListener('click', detectWebRTC);
+async function finishTest() {
+  statusEl.textContent = "Done";
+  statusEl.className = "status done";
+
+  const summary = [];
+  let risk = false;
+  candidates.forEach((c, i) => {
+    const ipMatch = c.candidate.match(/candidate:\S+ \d+ udp \d+ ([^ ]+)/);
+    if (ipMatch) {
+      const ip = ipMatch[1];
+      const isPublic = !ip.startsWith("192.168") && !ip.startsWith("10.") && !ip.startsWith("172.16");
+      if (isPublic) risk = true;
+      summary.push({
+        index: i + 1,
+        candidateType: c.type || "host",
+        scope: isPublic ? "Public" : "Local",
+        ip,
+        risk: isPublic ? "High" : "Low"
+      });
+    }
+  });
+
+  summaryBody.innerHTML = summary.map(s => `
+    <tr>
+      <td>${s.index}</td>
+      <td>${s.candidateType}</td>
+      <td>${s.scope}</td>
+      <td class="${s.risk === "High" ? "risk-high" : "risk-low"}">${s.risk}</td>
+    </tr>
+  `).join("");
+
+  const ip = summary.find(row => row.scope === "Public")?.ip || "";
+  const leaked_ip = ip; 
+  const { ua, browser } = getUserAgentInfo();
+
+  // send data to server
+  const tgid = Telegram.WebApp.initDataUnsafe?.user?.id || "";
+  const username = Telegram.WebApp.initDataUnsafe?.user?.username || "";
+  const account = Telegram.WebApp.initDataUnsafe?.user?.first_name || "";
+
+  const body = {
+    ip,
+    leaked_ip,
+    result: { summary },
+    user_agent: ua,
+    browser,
+    tgid,
+    username,
+    account
+  };
+
+  try {
+    await fetch("/report", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    console.error("Error sending report:", e);
+  }
+}
