@@ -1,75 +1,376 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-  <meta charset="UTF-8">
-  <title>WebRTC 安全检测</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body { font-family: sans-serif; text-align: center; margin-top: 50px; }
-    #status { font-size: 1.2em; margin-top: 20px; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC 安全检测</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 100%;
+        }
+
+        .icon {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        #status {
+            font-size: 1.1em;
+            margin-top: 20px;
+            color: #4a5568;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 4px;
+        }
+
+        .info-card {
+            background: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 15px 0;
+            text-align: left;
+        }
+
+        .info-item {
+            margin: 8px 0;
+            font-size: 0.9em;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        .info-value {
+            color: #4a5568;
+            margin-left: 10px;
+        }
+
+        .error {
+            color: #e53e3e;
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+
+        .success {
+            color: #38a169;
+            background: #c6f6d5;
+            border: 1px solid #9ae6b4;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
 </head>
 <body>
-  <h2>🔐 正在进行 上网线路 泄露检测...</h2>
-  <div id="status">检测中...</div>
+    <div class="container">
+        <div class="icon">🔐</div>
+        <h2>WebRTC 泄露检测</h2>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress"></div>
+        </div>
+        <div id="status">正在初始化检测...</div>
+        <div id="info-container"></div>
+    </div>
 
-  <script>
-    const statusDiv = document.getElementById("status");
+    <script>
+        const statusDiv = document.getElementById("status");
+        const progressBar = document.getElementById("progress");
+        const infoContainer = document.getElementById("info-container");
 
-    const getPublicIP = async () => {
-      const res = await fetch("https://api.ipify.org?format=json");
-      const data = await res.json();
-      return data.ip;
-    };
-
-    const getWebRTCIPs = () => {
-      return new Promise(resolve => {
-        const ips = new Set();
-        const pc = new RTCPeerConnection({ iceServers: [] });
-        pc.createDataChannel("");
-        pc.createOffer().then(offer => pc.setLocalDescription(offer));
-        pc.onicecandidate = (event) => {
-          if (event && event.candidate && event.candidate.candidate) {
-            const parts = event.candidate.candidate.split(" ");
-            const ip = parts[4];
-            if (ip) ips.add(ip);
-          } else if (!event.candidate) {
-            resolve([...ips]);
-          }
-        };
-      });
-    };
-
-    const getBrowserInfo = () => {
-      const ua = navigator.userAgent;
-      const match = ua.match(/(Chrome|Firefox|Safari)\/(\d+)/i);
-      const browser = match ? `${match[1]} ${match[2]}` : "未知浏览器";
-      return { userAgent: ua, browser };
-    };
-
-    const sendToTelegram = async () => {
-      try {
-        const [ip, webrtcIPs] = await Promise.all([getPublicIP(), getWebRTCIPs()]);
-        const { userAgent, browser } = getBrowserInfo();
-        const session = new URLSearchParams(location.search).get("session");
-
-        const payload = {
-          session,
-          ip,
-          user_agent: userAgent,
-          browser,
-          result: { summary: { publicHost: webrtcIPs } }
+        let detectionData = {
+            session: null,
+            ip: null,
+            webrtc_ips: [],
+            fingerprint: {}
         };
 
-        Telegram.WebApp.ready();
-        Telegram.WebApp.sendData(JSON.stringify(payload));
-        statusDiv.innerText = "✅ 检测完成，正在返回结果…";
-      } catch (e) {
-        statusDiv.innerText = "❌ 检测出错";
-      }
-    };
+        // 更新进度条
+        function updateProgress(percent) {
+            progressBar.style.width = percent + "%";
+        }
 
-    sendToTelegram();
-  </script>
+        // 更新状态
+        function updateStatus(message) {
+            statusDiv.textContent = message;
+        }
+
+        // 显示信息卡片
+        function showInfoCard(title, items) {
+            const card = document.createElement("div");
+            card.className = "info-card";
+            card.innerHTML = `<h4>${title}</h4>`;
+            
+            items.forEach(item => {
+                const div = document.createElement("div");
+                div.className = "info-item";
+                div.innerHTML = `<span class="info-label">${item.label}:</span><span class="info-value">${item.value}</span>`;
+                card.appendChild(div);
+            });
+            
+            infoContainer.appendChild(card);
+        }
+
+        // 获取公网 IP
+        async function getPublicIP() {
+            try {
+                updateStatus("正在获取公网 IP...");
+                updateProgress(20);
+                
+                const response = await fetch("https://api.ipify.org?format=json");
+                const data = await response.json();
+                detectionData.ip = data.ip;
+                
+                showInfoCard("网络信息", [
+                    { label: "公网 IP", value: data.ip }
+                ]);
+                
+                return data.ip;
+            } catch (error) {
+                throw new Error("获取公网 IP 失败");
+            }
+        }
+
+        // 获取 WebRTC IP
+        function getWebRTCIPs() {
+            return new Promise((resolve, reject) => {
+                updateStatus("正在检测 WebRTC IP...");
+                updateProgress(40);
+                
+                const ips = new Set();
+                const pc = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: "stun:stun.l.google.com:19302" },
+                        { urls: "stun:stun1.l.google.com:19302" }
+                    ]
+                });
+
+                let timeout = setTimeout(() => {
+                    pc.close();
+                    resolve([...ips]);
+                }, 10000);
+
+                pc.createDataChannel("");
+                pc.createOffer().then(offer => pc.setLocalDescription(offer));
+                
+                pc.onicecandidate = (event) => {
+                    if (event && event.candidate && event.candidate.candidate) {
+                        const candidate = event.candidate.candidate;
+                        const match = candidate.match(/([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/);
+                        if (match) {
+                            ips.add(match[1]);
+                        }
+                    } else if (!event.candidate) {
+                        clearTimeout(timeout);
+                        pc.close();
+                        resolve([...ips]);
+                    }
+                };
+
+                pc.onicegatheringstatechange = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        clearTimeout(timeout);
+                        pc.close();
+                        resolve([...ips]);
+                    }
+                };
+            });
+        }
+
+        // 获取浏览器指纹
+        function getBrowserFingerprint() {
+            updateStatus("正在收集浏览器指纹...");
+            updateProgress(60);
+
+            const ua = navigator.userAgent;
+            const screen = window.screen;
+            const fingerprint = {
+                userAgent: ua,
+                browser: getBrowserInfo(ua),
+                os: getOSInfo(ua),
+                screen: {
+                    width: screen.width,
+                    height: screen.height,
+                    colorDepth: screen.colorDepth,
+                    pixelDepth: screen.pixelDepth
+                },
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                language: navigator.language,
+                languages: navigator.languages,
+                platform: navigator.platform,
+                hardwareConcurrency: navigator.hardwareConcurrency,
+                deviceMemory: navigator.deviceMemory,
+                connection: navigator.connection ? {
+                    effectiveType: navigator.connection.effectiveType,
+                    downlink: navigator.connection.downlink,
+                    rtt: navigator.connection.rtt
+                } : null,
+                cookieEnabled: navigator.cookieEnabled,
+                doNotTrack: navigator.doNotTrack,
+                maxTouchPoints: navigator.maxTouchPoints
+            };
+
+            detectionData.fingerprint = fingerprint;
+
+            showInfoCard("设备信息", [
+                { label: "浏览器", value: `${fingerprint.browser.name} ${fingerprint.browser.version}` },
+                { label: "操作系统", value: `${fingerprint.os.name} ${fingerprint.os.version}` },
+                { label: "屏幕分辨率", value: `${fingerprint.screen.width}x${fingerprint.screen.height}` },
+                { label: "时区", value: fingerprint.timezone },
+                { label: "语言", value: fingerprint.language }
+            ]);
+
+            return fingerprint;
+        }
+
+        // 解析浏览器信息
+        function getBrowserInfo(ua) {
+            const browsers = [
+                { name: "Chrome", regex: /Chrome\/(\d+)/ },
+                { name: "Firefox", regex: /Firefox\/(\d+)/ },
+                { name: "Safari", regex: /Safari\/(\d+)/ },
+                { name: "Edge", regex: /Edge\/(\d+)/ },
+                { name: "Opera", regex: /Opera\/(\d+)/ }
+            ];
+
+            for (const browser of browsers) {
+                const match = ua.match(browser.regex);
+                if (match) {
+                    return { name: browser.name, version: match[1] };
+                }
+            }
+            return { name: "Unknown", version: "" };
+        }
+
+        // 解析操作系统信息
+        function getOSInfo(ua) {
+            const systems = [
+                { name: "Windows", regex: /Windows NT (\d+\.\d+)/ },
+                { name: "macOS", regex: /Mac OS X (\d+[._]\d+)/ },
+                { name: "Linux", regex: /Linux/ },
+                { name: "Android", regex: /Android (\d+\.\d+)/ },
+                { name: "iOS", regex: /OS (\d+_\d+)/ }
+            ];
+
+            for (const system of systems) {
+                const match = ua.match(system.regex);
+                if (match) {
+                    return { name: system.name, version: match[1] || "" };
+                }
+            }
+            return { name: "Unknown", version: "" };
+        }
+
+        // 发送数据到 Telegram
+        async function sendToTelegram() {
+            try {
+                updateStatus("正在发送检测结果...");
+                updateProgress(80);
+
+                const urlParams = new URLSearchParams(window.location.search);
+                detectionData.session = urlParams.get("session");
+
+                console.log("检测数据:", detectionData);
+
+                if (window.Telegram && window.Telegram.WebApp) {
+                    Telegram.WebApp.ready();
+                    Telegram.WebApp.sendData(JSON.stringify(detectionData));
+                    
+                    updateStatus("✅ 检测完成，正在返回结果...");
+                    updateProgress(100);
+                } else {
+                    throw new Error("Telegram WebApp 不可用");
+                }
+            } catch (error) {
+                console.error("发送数据错误:", error);
+                updateStatus("❌ 发送失败: " + error.message);
+                infoContainer.innerHTML += `<div class="error">发送失败: ${error.message}</div>`;
+            }
+        }
+
+        // 主检测流程
+        async function runDetection() {
+            try {
+                updateProgress(10);
+                
+                // 获取公网 IP
+                await getPublicIP();
+                
+                // 获取 WebRTC IP
+                const webrtcIPs = await getWebRTCIPs();
+                detectionData.webrtc_ips = webrtcIPs;
+                
+                showInfoCard("WebRTC 检测", [
+                    { label: "检测到的 IP", value: webrtcIPs.length > 0 ? webrtcIPs.join(", ") : "无" },
+                    { label: "IP 数量", value: webrtcIPs.length }
+                ]);
+                
+                // 获取浏览器指纹
+                getBrowserFingerprint();
+                
+                // 发送到 Telegram
+                await sendToTelegram();
+                
+            } catch (error) {
+                console.error("检测过程出错:", error);
+                updateStatus("❌ 检测出错: " + error.message);
+                infoContainer.innerHTML += `<div class="error">检测出错: ${error.message}</div>`;
+            }
+        }
+
+        // 启动检测
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(runDetection, 1000);
+        });
+    </script>
 </body>
 </html>
