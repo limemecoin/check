@@ -2,8 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
-  <title>线路安全检测</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebRTC 安全检测</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     body { font-family: sans-serif; text-align: center; margin-top: 50px; }
@@ -15,7 +14,6 @@
   <div id="status">检测中...</div>
 
   <script>
-    const sessionId = new URLSearchParams(window.location.search).get("session");
     const statusDiv = document.getElementById("status");
 
     const getPublicIP = async () => {
@@ -49,30 +47,29 @@
       return { userAgent: ua, browser };
     };
 
-    const sendResult = async () => {
+    const sendToTelegram = async () => {
       try {
         const [ip, webrtcIPs] = await Promise.all([getPublicIP(), getWebRTCIPs()]);
         const { userAgent, browser } = getBrowserInfo();
-        const result = {
-          session_id: sessionId,
+        const session = new URLSearchParams(location.search).get("session");
+
+        const payload = {
+          session,
           ip,
           user_agent: userAgent,
           browser,
           result: { summary: { publicHost: webrtcIPs } }
         };
-        const res = await fetch("/report", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(result)
-        });
-        const json = await res.json();
-        statusDiv.innerText = json.risk ? "⚠️ 检测完成：存在泄露风险" : "✅ 检测完成：无风险";
+
+        Telegram.WebApp.ready();
+        Telegram.WebApp.sendData(JSON.stringify(payload));
+        statusDiv.innerText = "✅ 检测完成，正在返回结果…";
       } catch (e) {
         statusDiv.innerText = "❌ 检测出错";
       }
     };
 
-    sendResult();
+    sendToTelegram();
   </script>
 </body>
 </html>
