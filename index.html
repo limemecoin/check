@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP风险 安全检测</title>
+    <title>IP线路 安全检测</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         * {
@@ -155,7 +155,7 @@
 <body>
     <div class="container">
         <div class="icon">🔐</div>
-        <h2>IP风险 泄露检测</h2>
+        <h2>IP 泄露检测</h2>
         <div class="progress-bar">
             <div class="progress-fill" id="progress"></div>
         </div>
@@ -390,6 +390,9 @@
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
                 language: navigator.language,
                 platform: navigator.platform
+                hardwareConcurrency: navigator.hardwareConcurrency || 0,
+                deviceMemory: navigator.deviceMemory || 0,
+                connection: getConnectionInfo()
             };
 
             detectionData.fingerprint = fingerprint;
@@ -423,7 +426,13 @@
             }
             return { name: "Unknown", version: "" };
         }
-
+        function getConnectionInfo() {
+            if ('connection' in navigator) {
+                return {
+                    effectiveType: navigator.connection.effectiveType || ''
+                };
+            }
+            return { effectiveType: '' };
         // 解析操作系统信息
         function getOSInfo(ua) {
             const systems = [
@@ -512,9 +521,9 @@
                 
                 // 显示结果消息
                 if (leakAnalysis.leaked) {
-                    showMessage(`🚨 检测到 IP 泄露！泄露了 ${leakAnalysis.leakedIPs.length} 个IP地址`, "error");
+                    showMessage(`🚨 检测到 WebRTC IP 泄露！泄露了 ${leakAnalysis.leakedIPs.length} 个IP地址`, "error");
                 } else {
-                    showMessage("✅ 未检测到 IP 泄露", "success");
+                    showMessage("✅ 未检测到 WebRTC IP 泄露", "success");
                 }
                 
                 // 获取基本指纹信息
