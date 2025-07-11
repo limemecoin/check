@@ -1,69 +1,29 @@
-
-<!DOCTYPE html>
-<html lang="en">
+# ---------------------------------------------------------------------------
+# Embeddable debug.html (copy to your hosting and set WEBAPP_URL accordingly)
+# ---------------------------------------------------------------------------
+DEBUG_HTML = r"""<!DOCTYPE html>
+<html lang=\"en\">
 <head>
-    <meta charset="UTF-8">
-    <title>Telegram WebApp Debug</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        body {
-            font-family: sans-serif;
-            background: #f2f2f2;
-            padding: 30px;
-            text-align: center;
-        }
-        pre {
-            background: #fff;
-            padding: 15px;
-            border: 1px solid #ccc;
-            text-align: left;
-            white-space: pre-wrap;
-            word-break: break-word;
-        }
-        button {
-            margin-top: 20px;
-            padding: 10px 20px;
-            font-size: 16px;
-        }
-    </style>
+<meta charset=\"UTF-8\">
+<title>Telegram WebApp Debug</title>
+<script src=\"https://telegram.org/js/telegram-web-app.js\"></script>
+<style>body{font-family:sans-serif;text-align:center;margin:2rem}</style>
 </head>
 <body>
-    <h2>Telegram WebApp Debug Page</h2>
-    <p>Use this page to test if <code>Telegram.WebApp.sendData()</code> is triggered correctly.</p>
-
-    <pre id="log">Waiting for interaction...</pre>
-
-    <button onclick="testSend()">Send Test Data</button>
-
-    <script>
-        const log = document.getElementById("log");
-
-        function logMessage(msg) {
-            log.textContent += "\n" + msg;
-        }
-
-        function testSend() {
-            logMessage("🟢 Triggering sendData...");
-            if (window.Telegram && window.Telegram.WebApp) {
-                Telegram.WebApp.ready();
-                const testData = {
-                    session: "debug_session_" + Date.now(),
-                    status: "testing sendData",
-                    timestamp: new Date().toISOString()
-                };
-                logMessage("📤 Data: " + JSON.stringify(testData));
-                Telegram.WebApp.sendData(JSON.stringify(testData));
-                logMessage("✅ sendData called.");
-
-                setTimeout(() => {
-                    logMessage("🔚 Closing WebApp...");
-                    Telegram.WebApp.close();
-                }, 2000);
-            } else {
-                logMessage("❌ Telegram.WebApp not available.");
-                alert("Telegram.WebApp not available. Are you inside Telegram?");
-            }
-        }
-    </script>
+<h2>Telegram WebApp Debug Page</h2>
+<button id=\"btn\">Send test data</button>
+<pre id=\"log\">Waiting...</pre>
+<script>
+const log = msg => document.getElementById('log').textContent += "\n" + msg;
+Telegram.WebApp.ready();
+log('✅ WebApp ready');
+document.getElementById('btn').onclick = () => {
+  const payload = {session: Date.now(), note: 'hello from WebApp'};
+  log('📤 sending ' + JSON.stringify(payload));
+  Telegram.WebApp.sendData(JSON.stringify(payload));
+  log('✅ sendData called');
+  setTimeout(() => Telegram.WebApp.close(), 1500);
+};
+</script>
 </body>
 </html>
