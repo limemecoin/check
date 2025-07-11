@@ -1,554 +1,69 @@
+
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IP线路 安全检测</title>
+    <title>Telegram WebApp Debug</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: #333;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .container {
-            background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
+            font-family: sans-serif;
+            background: #f2f2f2;
             padding: 30px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             text-align: center;
-            max-width: 400px;
-            width: 100%;
         }
-
-        .icon {
-            font-size: 3rem;
-            margin-bottom: 20px;
-            animation: pulse 2s infinite;
+        pre {
+            background: #fff;
+            padding: 15px;
+            border: 1px solid #ccc;
+            text-align: left;
+            white-space: pre-wrap;
+            word-break: break-word;
         }
-
-        @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-        }
-
-        h2 {
-            color: #2d3748;
-            margin-bottom: 20px;
-            font-weight: 600;
-        }
-
-        #status {
-            font-size: 1.1em;
+        button {
             margin-top: 20px;
-            color: #4a5568;
-            min-height: 1.5em;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #e2e8f0;
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 20px 0;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
-            width: 0%;
-            transition: width 0.5s ease;
-            border-radius: 4px;
-        }
-
-        .info-card {
-            background: #f7fafc;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 20px;
-            margin: 15px 0;
-            text-align: left;
-        }
-
-        .info-item {
-            margin: 10px 0;
-            font-size: 0.95em;
-        }
-
-        .info-label {
-            font-weight: 600;
-            color: #2d3748;
-            display: inline-block;
-            width: 120px;
-        }
-
-        .info-value {
-            color: #4a5568;
-            word-break: break-all;
-        }
-
-        .error {
-            color: #e53e3e;
-            background: #fed7d7;
-            border: 1px solid #feb2b2;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-        }
-
-        .success {
-            color: #38a169;
-            background: #c6f6d5;
-            border: 1px solid #9ae6b4;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-        }
-
-        .warning {
-            color: #d69e2e;
-            background: #faf5cc;
-            border: 1px solid #f6e05e;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 15px 0;
-        }
-
-        .spinner {
-            border: 2px solid #f3f3f3;
-            border-top: 2px solid #4facfe;
-            border-radius: 50%;
-            width: 20px;
-            height: 20px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            margin-right: 10px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .tech-details {
-            font-size: 0.8em;
-            color: #666;
-            margin-top: 10px;
-            text-align: left;
+            padding: 10px 20px;
+            font-size: 16px;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="icon">🔐</div>
-        <h2>IP 泄露检测</h2>
-        <div class="progress-bar">
-            <div class="progress-fill" id="progress"></div>
-        </div>
-        <div id="status"><div class="spinner"></div>正在初始化检测...</div>
-        <div id="info-container"></div>
-    </div>
+    <h2>Telegram WebApp Debug Page</h2>
+    <p>Use this page to test if <code>Telegram.WebApp.sendData()</code> is triggered correctly.</p>
+
+    <pre id="log">Waiting for interaction...</pre>
+
+    <button onclick="testSend()">Send Test Data</button>
 
     <script>
-        const statusDiv = document.getElementById("status");
-        const progressBar = document.getElementById("progress");
-        const infoContainer = document.getElementById("info-container");
+        const log = document.getElementById("log");
 
-        let detectionData = {
-            session: null,
-            ip: null,
-            webrtc_ips: [],
-            fingerprint: {},
-            leak_detected: false,
-            risk_level: "LOW"
-        };
-
-        // 更新进度条
-        function updateProgress(percent) {
-            progressBar.style.width = percent + "%";
+        function logMessage(msg) {
+            log.textContent += "\n" + msg;
         }
 
-        // 更新状态
-        function updateStatus(message, showSpinner = true) {
-            statusDiv.innerHTML = showSpinner ? `<div class="spinner"></div>${message}` : message;
-        }
-
-        // 显示信息卡片
-        function showInfoCard(title, items) {
-            const card = document.createElement("div");
-            card.className = "info-card";
-            card.innerHTML = `<h4 style="margin-bottom: 15px; color: #2d3748;">${title}</h4>`;
-            
-            items.forEach(item => {
-                const div = document.createElement("div");
-                div.className = "info-item";
-                div.innerHTML = `<span class="info-label">${item.label}:</span><span class="info-value">${item.value}</span>`;
-                card.appendChild(div);
-            });
-            
-            infoContainer.appendChild(card);
-        }
-
-        // 显示警告或成功消息
-        function showMessage(message, type = "info") {
-            const messageDiv = document.createElement("div");
-            messageDiv.className = type;
-            messageDiv.textContent = message;
-            infoContainer.appendChild(messageDiv);
-        }
-
-        // 检查是否为内网IP
-        function isPrivateIP(ip) {
-            const privateRanges = [
-                /^10\./,
-                /^172\.(1[6-9]|2\d|3[0-1])\./,
-                /^192\.168\./,
-                /^127\./,
-                /^169\.254\./,
-                /^::1$/,
-                /^fe80:/,
-                /^fc00:/,
-                /^fd00:/,
-                /^::ffff:0:0\/96/
-            ];
-            return privateRanges.some(range => range.test(ip));
-        }
-
-        // 检查是否为有效的公网IP
-        function isValidPublicIP(ip) {
-            if (!ip || ip === "0.0.0.0" || ip === "127.0.0.1") return false;
-            if (isPrivateIP(ip)) return false;
-            
-            // 检查IP格式
-            const ipv4Regex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
-            const ipv6Regex = /^([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}$/;
-            
-            return ipv4Regex.test(ip) || ipv6Regex.test(ip);
-        }
-
-        // 获取公网 IP
-        async function getPublicIP() {
-            try {
-                updateStatus("正在获取公网 IP...");
-                updateProgress(20);
-                
-                const response = await fetch("https://api.ipify.org?format=json");
-                const data = await response.json();
-                detectionData.ip = data.ip;
-                
-                showInfoCard("网络信息", [
-                    { label: "公网 IP", value: data.ip || "未获取到" }
-                ]);
-                
-                return data.ip;
-            } catch (error) {
-                console.error("获取公网 IP 失败:", error);
-                showMessage("⚠️ 获取公网 IP 失败，将继续进行 WebRTC 检测", "warning");
-                return null;
-            }
-        }
-
-        // 获取 WebRTC IP - 改进版本
-        function getWebRTCIPs() {
-            return new Promise((resolve) => {
-                updateStatus("正在检测 WebRTC IP 泄露...");
-                updateProgress(50);
-                
-                const ips = new Set();
-                const configs = [
-                    { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] },
-                    { iceServers: [{ urls: "stun:stun1.l.google.com:19302" }] },
-                    { iceServers: [{ urls: "stun:stun.services.mozilla.com" }] },
-                    { iceServers: [{ urls: "stun:stun.cloudflare.com:3478" }] }
-                ];
-
-                let completedConnections = 0;
-                const totalConnections = configs.length;
-
-                configs.forEach((config, index) => {
-                    setTimeout(() => {
-                        const pc = new RTCPeerConnection(config);
-                        
-                        const timeout = setTimeout(() => {
-                            pc.close();
-                            completedConnections++;
-                            if (completedConnections === totalConnections) {
-                                resolve([...ips]);
-                            }
-                        }, 8000);
-
-                        pc.createDataChannel("");
-                        pc.createOffer().then(offer => pc.setLocalDescription(offer));
-                        
-                        pc.onicecandidate = (event) => {
-                            if (event && event.candidate && event.candidate.candidate) {
-                                const candidate = event.candidate.candidate;
-                                
-                                // 更全面的IP提取
-                                const ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3}|[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7})/g;
-                                const matches = candidate.match(ipRegex);
-                                
-                                if (matches) {
-                                    matches.forEach(ip => {
-                                        if (ip && !ip.startsWith('0.') && !ip.startsWith('127.')) {
-                                            ips.add(ip);
-                                        }
-                                    });
-                                }
-                            } else if (!event.candidate) {
-                                clearTimeout(timeout);
-                                pc.close();
-                                completedConnections++;
-                                if (completedConnections === totalConnections) {
-                                    resolve([...ips]);
-                                }
-                            }
-                        };
-
-                        pc.onicegatheringstatechange = () => {
-                            if (pc.iceGatheringState === 'complete') {
-                                clearTimeout(timeout);
-                                pc.close();
-                                completedConnections++;
-                                if (completedConnections === totalConnections) {
-                                    resolve([...ips]);
-                                }
-                            }
-                        };
-                    }, index * 1000); // 延迟启动不同的连接
-                });
-
-                // 总体超时
-                setTimeout(() => {
-                    resolve([...ips]);
-                }, 15000);
-            });
-        }
-
-        // 分析IP泄露风险
-        function analyzeIPLeak(publicIP, webrtcIPs) {
-            const leakedIPs = [];
-            
-            if (!webrtcIPs || webrtcIPs.length === 0) {
-                return { leaked: false, risk: "LOW", leakedIPs: [] };
-            }
-
-            // 过滤掉无效的IP
-            const validWebRTCIPs = webrtcIPs.filter(ip => {
-                if (!ip || ip === publicIP) return false;
-                if (ip.startsWith('0.') || ip === '127.0.0.1') return false;
-                return true;
-            });
-
-            // 查找真正的泄露IP（与公网IP不同的有效公网IP）
-            validWebRTCIPs.forEach(ip => {
-                if (isValidPublicIP(ip) && ip !== publicIP) {
-                    leakedIPs.push(ip);
-                }
-            });
-
-            const leaked = leakedIPs.length > 0;
-            let risk = "LOW";
-            
-            if (leaked) {
-                risk = leakedIPs.length > 1 ? "HIGH" : "MEDIUM";
-            }
-
-            return { leaked, risk, leakedIPs };
-        }
-
-        // 获取基本的浏览器指纹
-        function getBasicFingerprint() {
-            updateStatus("正在收集设备信息...");
-            updateProgress(70);
-
-            const ua = navigator.userAgent;
-            const screen = window.screen;
-            const fingerprint = {
-                userAgent: ua,
-                browser: getBrowserInfo(ua),
-                os: getOSInfo(ua),
-                screen: {
-                    width: screen.width,
-                    height: screen.height,
-                    colorDepth: screen.colorDepth
-                },
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-                language: navigator.language,
-                platform: navigator.platform
-                hardwareConcurrency: navigator.hardwareConcurrency || 0,
-                deviceMemory: navigator.deviceMemory || 0,
-                connection: getConnectionInfo()
-            };
-
-            detectionData.fingerprint = fingerprint;
-
-            showInfoCard("设备信息", [
-                { label: "浏览器", value: `${fingerprint.browser.name} ${fingerprint.browser.version}` },
-                { label: "操作系统", value: `${fingerprint.os.name} ${fingerprint.os.version}` },
-                { label: "屏幕分辨率", value: `${fingerprint.screen.width}x${fingerprint.screen.height}` },
-                { label: "时区", value: fingerprint.timezone },
-                { label: "语言", value: fingerprint.language }
-            ]);
-
-            return fingerprint;
-        }
-
-        // 解析浏览器信息
-        function getBrowserInfo(ua) {
-            const browsers = [
-                { name: "Chrome", regex: /Chrome\/(\d+)/ },
-                { name: "Firefox", regex: /Firefox\/(\d+)/ },
-                { name: "Safari", regex: /Safari\/(\d+)/ },
-                { name: "Edge", regex: /Edge\/(\d+)/ },
-                { name: "Opera", regex: /Opera\/(\d+)/ }
-            ];
-
-            for (const browser of browsers) {
-                const match = ua.match(browser.regex);
-                if (match) {
-                    return { name: browser.name, version: match[1] };
-                }
-            }
-            return { name: "Unknown", version: "" };
-        }
-        function getConnectionInfo() {
-            if ('connection' in navigator) {
-                return {
-                    effectiveType: navigator.connection.effectiveType || ''
+        function testSend() {
+            logMessage("🟢 Triggering sendData...");
+            if (window.Telegram && window.Telegram.WebApp) {
+                Telegram.WebApp.ready();
+                const testData = {
+                    session: "debug_session_" + Date.now(),
+                    status: "testing sendData",
+                    timestamp: new Date().toISOString()
                 };
-            }
-            return { effectiveType: '' };
-        // 解析操作系统信息
-        function getOSInfo(ua) {
-            const systems = [
-                { name: "Windows", regex: /Windows NT (\d+\.\d+)/ },
-                { name: "macOS", regex: /Mac OS X (\d+[._]\d+)/ },
-                { name: "Linux", regex: /Linux/ },
-                { name: "Android", regex: /Android (\d+\.\d+)/ },
-                { name: "iOS", regex: /OS (\d+_\d+)/ }
-            ];
+                logMessage("📤 Data: " + JSON.stringify(testData));
+                Telegram.WebApp.sendData(JSON.stringify(testData));
+                logMessage("✅ sendData called.");
 
-            for (const system of systems) {
-                const match = ua.match(system.regex);
-                if (match) {
-                    return { name: system.name, version: match[1] || "" };
-                }
-            }
-            return { name: "Unknown", version: "" };
-        }
-
-        // 发送数据到 Telegram
-        async function sendToTelegram() {
-            try {
-                updateStatus("正在发送检测结果...", false);
-                updateProgress(90);
-
-                const urlParams = new URLSearchParams(window.location.search);
-                detectionData.session = urlParams.get("session") || `session_${Date.now()}`;
-
-                console.log("检测数据:", detectionData);
-
-                if (window.Telegram && window.Telegram.WebApp) {
-                    Telegram.WebApp.ready();
-                    Telegram.WebApp.sendData(JSON.stringify(detectionData));
-                    
-                    updateStatus("✅ 检测完成，正在返回结果...", false);
-                    updateProgress(100);
-                    
-                    // 延迟关闭
-                    setTimeout(() => {
-                        Telegram.WebApp.close();
-                    }, 2000);
-                } else {
-                    throw new Error("Telegram WebApp 不可用");
-                }
-            } catch (error) {
-                console.error("发送数据错误:", error);
-                updateStatus("❌ 发送失败: " + error.message, false);
-                showMessage("发送失败: " + error.message, "error");
+                setTimeout(() => {
+                    logMessage("🔚 Closing WebApp...");
+                    Telegram.WebApp.close();
+                }, 2000);
+            } else {
+                logMessage("❌ Telegram.WebApp not available.");
+                alert("Telegram.WebApp not available. Are you inside Telegram?");
             }
         }
-
-        // 主检测流程
-        async function runDetection() {
-            try {
-                updateProgress(10);
-                
-                // 获取公网 IP
-                const publicIP = await getPublicIP();
-                
-                // 获取 WebRTC IP
-                const webrtcIPs = await getWebRTCIPs();
-                detectionData.webrtc_ips = webrtcIPs;
-                
-                // 分析IP泄露
-                const leakAnalysis = analyzeIPLeak(publicIP, webrtcIPs);
-                detectionData.leak_detected = leakAnalysis.leaked;
-                detectionData.risk_level = leakAnalysis.risk;
-                
-                // 显示WebRTC检测结果
-                const webrtcInfo = [];
-                if (webrtcIPs.length > 0) {
-                    webrtcInfo.push({ label: "检测到的 IP", value: webrtcIPs.join(", ") });
-                    webrtcInfo.push({ label: "IP 数量", value: webrtcIPs.length.toString() });
-                    
-                    if (leakAnalysis.leaked) {
-                        webrtcInfo.push({ label: "泄露状态", value: "⚠️ 检测到泄露" });
-                        webrtcInfo.push({ label: "风险等级", value: leakAnalysis.risk });
-                    } else {
-                        webrtcInfo.push({ label: "泄露状态", value: "✅ 未检测到泄露" });
-                    }
-                } else {
-                    webrtcInfo.push({ label: "检测结果", value: "未检测到 WebRTC IP" });
-                }
-                
-                showInfoCard("WebRTC 检测", webrtcInfo);
-                
-                // 显示结果消息
-                if (leakAnalysis.leaked) {
-                    showMessage(`🚨 检测到 WebRTC IP 泄露！泄露了 ${leakAnalysis.leakedIPs.length} 个IP地址`, "error");
-                } else {
-                    showMessage("✅ 未检测到 WebRTC IP 泄露", "success");
-                }
-                
-                // 获取基本指纹信息
-                getBasicFingerprint();
-                
-                // 发送到 Telegram
-                await sendToTelegram();
-                
-            } catch (error) {
-                console.error("检测过程出错:", error);
-                updateStatus("❌ 检测出错: " + error.message, false);
-                showMessage("检测出错: " + error.message, "error");
-            }
-        }
-
-        // 启动检测
-        document.addEventListener('DOMContentLoaded', function() {
-            // 检查WebRTC支持
-            if (!window.RTCPeerConnection) {
-                showMessage("❌ 您的浏览器不支持 WebRTC", "error");
-                return;
-            }
-            
-            setTimeout(runDetection, 1000);
-        });
     </script>
 </body>
 </html>
